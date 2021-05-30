@@ -1,8 +1,8 @@
 # bicycleModel_osqpMPC
-Implementation of the MPC described in [`Combined lateral and longitudinal control for autonomous driving based on Model Predictive Control`](https://webthesis.biblio.polito.it/10667/1/tesi.pdf) with the [`osqp`](http://osqp.readthedocs.io/en/latest/index.html) solver, [`Eigen3`](http://eigen.tuxfamily.org/index.php?title=Main_Page) and the wrapper [`osqp-eigen`](https://github.com/robotology/osqp-eigen).
+Implementation of the MPC described in [`Combined lateral and longitudinal control for autonomous driving based on Model Predictive Control`](https://webthesis.biblio.polito.it/10667/1/tesi.pdf) with the [`osqp`](https://github.com/oxfordcontrol/osqp) solver, [`Eigen3`](http://eigen.tuxfamily.org/index.php?title=Main_Page) and the wrapper [`osqp-eigen`](https://github.com/robotology/osqp-eigen).
 
 ## Dependeces
-- [`osqp`](http://osqp.readthedocs.io/en/latest/index.html)
+- [`osqp`](https://github.com/oxfordcontrol/osqp)
 - [`Eigen3`](http://eigen.tuxfamily.org/index.php?title=Main_Page)
 - [`osqp-eigen`](https://github.com/robotology/osqp-eigen)
 
