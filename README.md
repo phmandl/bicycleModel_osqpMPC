@@ -19,5 +19,5 @@ Implementation of the MPC described in [`Combined lateral and longitudinal contr
    mkdir build
    cd build
    cmake --build .
-   ./MPC
+   ./bicycleModel_osqpMPC
    ```
