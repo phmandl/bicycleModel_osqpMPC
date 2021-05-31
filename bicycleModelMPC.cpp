@@ -135,6 +135,8 @@ System setDiscreteSystem(System &cont, struct params &data, double Vx) {
 QPmatrizen setHessianGradient(System &dis, params &data, VectorXd &xk, VectorXd &curvature, VectorXd &v_ref) {
     QPmatrizen out;
 
+    // auto t1 = high_resolution_clock::now();
+
     // start with creating F
     MatrixXd F = MatrixXd::Zero(data.Np*data.ny,data.nx);
     for (size_t i = 0; i < data.Np; i++)
@@ -145,9 +147,10 @@ QPmatrizen setHessianGradient(System &dis, params &data, VectorXd &xk, VectorXd 
     // Make Phi_u
     MatrixXd Phi_u = MatrixXd::Zero(data.Np*data.ny, data.Nc*data.nu);
     MatrixXd firstCol = MatrixXd::Zero(data.Np*data.ny, data.nu);
-    for (size_t i = 0; i < data.Np; i++)
+    firstCol.block(0,0,data.ny,data.nu) = dis.C*dis.A.pow(0)*dis.B;
+    for (size_t i = 1; i < data.Np; i++)
     {
-        firstCol.block(data.ny*i,0,data.ny,data.nu) = dis.C*dis.A.pow(i)*dis.B;
+        firstCol.block(data.ny*i,0,data.ny,data.nu) = F.block(data.ny*(i - 1),0,data.ny,data.nx)*dis.B;
     }
     for (size_t i = 0; i < data.Nc; i++)
     {
@@ -157,14 +160,19 @@ QPmatrizen setHessianGradient(System &dis, params &data, VectorXd &xk, VectorXd 
     // // Phi_z
     MatrixXd Phi_z = MatrixXd::Zero(data.Np*data.ny, data.Np*data.nz);
     firstCol = MatrixXd::Zero(data.Np*data.ny, data.nz);
-    for (size_t i = 0; i < data.Np; i++)
+    firstCol.block(0,0,data.ny,data.nz) = dis.C*dis.A.pow(0)*dis.E;
+    for (size_t i = 1; i < data.Np; i++)
     {
-        firstCol.block(data.ny*i,0,data.ny,data.nz) = dis.C*dis.A.pow(i)*dis.E;
+        firstCol.block(data.ny*i,0,data.ny,data.nz) = F.block(data.ny*(i - 1),0,data.ny,data.nx)*dis.E;
     }
     for (size_t i = 0; i < data.Np; i++)
     {
         Phi_z.block(data.ny*i, data.nz*i, data.Np*data.ny - data.ny*i, data.nz) = firstCol.block(0, 0, data.Np*data.ny - data.ny*i, data.nz);
     }
+
+    // auto t2 = high_resolution_clock::now();
+    // duration<double, std::milli> ms_double = (t2 - t1);
+    // std::cout << "\nHessian runtime: " << ms_double.count() << "ms";
 
     // // Make big weighting matrix
     Vector2d R(data.R1,data.R2);
@@ -180,14 +188,16 @@ QPmatrizen setHessianGradient(System &dis, params &data, VectorXd &xk, VectorXd 
         reference(i) = v_ref(i/data.ny);
     }
 
-    // std::cout << reference << std::endl;
-
     // Build hessian and QP problem
     MatrixXd H = MatrixXd::Zero(data.Nc*data.nu,data.Nc*data.nu);
     H = 2.0*(2.0*Phi_u.adjoint()*bigQ*Phi_u + bigR);
     // H = 0.5*(H + H.adjoint()); // Your Hessian is not symmetric --> make it symmetric!
 
-    //populate sparse hessian matrix
+    // Make vector f
+    VectorXd f(data.Nc*data.nu,1);
+    f = (-1*0.5*(reference - F*xk - Phi_z*curvature).adjoint()*bigQ*Phi_u).transpose();
+
+    //populate sparse hessian matrix (time intensiv)
     SparseMatrix<double> hessian(data.Np*data.nu,data.Np*data.nu);
     for (size_t i = 0; i < data.Np*data.nu; i++)
     {
@@ -200,10 +210,6 @@ QPmatrizen setHessianGradient(System &dis, params &data, VectorXd &xk, VectorXd 
             }                
         }        
     }
-
-    // Make vector f
-    VectorXd f(data.Nc*data.nu,1);
-    f = (-1*0.5*(reference - F*xk - Phi_z*curvature).adjoint()*bigQ*Phi_u).transpose();
 
     // assign output
     out.hessian = hessian;
@@ -298,23 +304,25 @@ int main()
     QPSolution = solver.getSolution();
 
     std::cout << QPSolution << std::endl;
-
+    
     auto t1 = high_resolution_clock::now();
+    // Loop ten times and calcute average time
+    for (size_t i = 0; i < 10; i++)
+    {
+        // Update hessian --> next step
+        dis = setDiscreteSystem(cont,data,0.1); // Update first the discrete system ---> velocity update!
+        qp_matrizen = setHessianGradient(dis,data,xk,curvature,v_ref); // Build hessian etc
+        if(!solver.updateHessianMatrix(qp_matrizen.hessian)) return 1;
+        if(!solver.updateGradient(qp_matrizen.gradient)) return 1;
 
-    // Update hessian --> next step
-    dis = setDiscreteSystem(cont,data,0.1); // Update first the discrete system ---> velocity update!
-    qp_matrizen = setHessianGradient(dis,data,xk,curvature,v_ref); // Build hessian etc
-    if(!solver.updateHessianMatrix(qp_matrizen.hessian)) return 1;
-    if(!solver.updateGradient(qp_matrizen.gradient)) return 1;
+        // Solve again
+        if(!solver.solve()) return 1;
+        QPSolution = solver.getSolution();
 
-    // Solve again
-    if(!solver.solve()) return 1;
-    QPSolution = solver.getSolution();
-
-    std::cout << QPSolution << std::endl;
+    }
 
     auto t2 = high_resolution_clock::now();
-    duration<double, std::milli> ms_double = t2 - t1;
-    std::cout << "Runtime for one run: " << ms_double.count() << "ms";
+    duration<double, std::milli> ms_double = (t2 - t1)/10;
+    std::cout << "\nAverage runtime: " << ms_double.count() << "ms\n";
 }    
 
