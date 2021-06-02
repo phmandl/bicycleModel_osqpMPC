@@ -22,15 +22,15 @@ struct params
     double Iz = 2875; // Nms^2 - yaw moment
 
     // system size
-    int nx = 6;
+    const int nx = 6;
     int nu = 2;
     int ny = 3;
     int nz = 1;
 
     // MPC STUFF
     double Ts = 0.1; //s - sampling Time
-    double Tl = 1; // s - look-ahead time
-    int Np = Tl/Ts;
+    double Tl = 5; // s - look-ahead time
+    const int Np = Tl/Ts;
     int Nc = Np;
     int variables = Nc*nu;
 
@@ -132,10 +132,8 @@ System setDiscreteSystem(System &cont, struct params &data, double Vx) {
     return dis;
 }
 
-QPmatrizen setHessianGradient(System &dis, params &data, VectorXd &xk, VectorXd &curvature, VectorXd &v_ref) {
+QPmatrizen setHessianGradient(System &dis, const params &data, VectorXd &xk, VectorXd &curvature, VectorXd &v_ref) {
     QPmatrizen out;
-
-    // auto t1 = high_resolution_clock::now();
 
     // start with creating F
     MatrixXd F = MatrixXd::Zero(data.Np*data.ny,data.nx);
@@ -170,10 +168,6 @@ QPmatrizen setHessianGradient(System &dis, params &data, VectorXd &xk, VectorXd 
         Phi_z.block(data.ny*i, data.nz*i, data.Np*data.ny - data.ny*i, data.nz) = firstCol.block(0, 0, data.Np*data.ny - data.ny*i, data.nz);
     }
 
-    // auto t2 = high_resolution_clock::now();
-    // duration<double, std::milli> ms_double = (t2 - t1);
-    // std::cout << "\nHessian runtime: " << ms_double.count() << "ms";
-
     // // Make big weighting matrix
     Vector2d R(data.R1,data.R2);
     Vector3d Q(data.Q1,data.Q2,data.Q3);
@@ -188,31 +182,21 @@ QPmatrizen setHessianGradient(System &dis, params &data, VectorXd &xk, VectorXd 
         reference(i) = v_ref(i/data.ny);
     }
 
-    // Build hessian and QP problem
-    MatrixXd H = MatrixXd::Zero(data.Nc*data.nu,data.Nc*data.nu);
-    H = 2.0*(2.0*Phi_u.adjoint()*bigQ*Phi_u + bigR);
-    // H = 0.5*(H + H.adjoint()); // Your Hessian is not symmetric --> make it symmetric!
+    SparseMatrix<double> spH, spF, spPhi_u, spBigR, spBigQ; //without allocation
+    spF = F.sparseView();
+    spPhi_u = Phi_u.sparseView();
+    spBigR = bigR.sparseView();
+    spBigQ = bigQ.sparseView();
+
+    // Calculate hessian with sparse --> faster
+    spH = 2.0*(2.0*spPhi_u.adjoint()*spBigQ*spPhi_u + spBigR);
 
     // Make vector f
     VectorXd f(data.Nc*data.nu,1);
     f = (-1*0.5*(reference - F*xk - Phi_z*curvature).adjoint()*bigQ*Phi_u).transpose();
 
-    //populate sparse hessian matrix (time intensiv)
-    SparseMatrix<double> hessian(data.Np*data.nu,data.Np*data.nu);
-    for (size_t i = 0; i < data.Np*data.nu; i++)
-    {
-        for (size_t ii = 0; ii < data.Np*data.nu; ii++)
-        {
-            double value = H(i,ii);
-            if (value != 0)
-            {
-                hessian.insert(i,ii) = value;
-            }                
-        }        
-    }
-
     // assign output
-    out.hessian = hessian;
+    out.hessian = spH;
     out.gradient = f;
     return out;
 }
@@ -263,7 +247,8 @@ int main()
     xk << 0, 0, 0, 0, 0, 0.6568;
 
     VectorXd curvature(data.Np,1);
-    curvature << 0.0530,  0.1152,    0.1264,    0.1385,    0.1514,    0.1650,    0.1794,    0.1942,    0.2093,    0.2244;
+    curvature = VectorXd::Zero(data.Np)/10;
+    // curvature << 0.0530,  0.1152,    0.1264,    0.1385,    0.1514,    0.1650,    0.1794,    0.1942,    0.2093,    0.2244;
     // ---------------------------------------------------------------------------
     
     // System-Matrix
@@ -281,7 +266,7 @@ int main()
     // OSQP - solve the problem
     OsqpEigen::Solver solver;
     solver.settings()->setWarmStart(true);
-    solver.settings()->setVerbosity(true); // disable solver feeback
+    solver.settings()->setVerbosity(false); // disable solver feeback
 
     solver.data()->setNumberOfVariables(data.Nc*data.nu);
     solver.data()->setNumberOfConstraints(data.Np*data.nu);
