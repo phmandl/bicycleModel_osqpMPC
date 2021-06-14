@@ -105,132 +105,131 @@ System setDiscreteSystem(System &cont, struct params &data, double Vx) {
     dis.E = cont.E;
     dis.C = cont.C;
 
-    // dis.A(2,2) = cont.A(2,2)/Vx;
-    dis.A.insert(2,3) = cont.A(2,3)/Vx - Vx;
-    dis.A.insert(3,2) = cont.A(3,2)/Vx;
-    dis.A.insert(3,3) = cont.A(3,3)/Vx;
-    dis.A.insert(4,5) = cont.A(4,5)*Vx;
-    dis.E.insert(5) = cont.E(5)*Vx;
+    dis.A.coeffRef(2,2) = cont.A.coeff(2,2)/Vx;
+    dis.A.coeffRef(2,3) = cont.A.coeff(2,3)/Vx - Vx;
+    dis.A.coeffRef(3,2) = cont.A.coeff(3,2)/Vx;
+    dis.A.coeffRef(3,3) = cont.A.coeff(3,3)/Vx;
+    dis.A.coeffRef(4,5) = cont.A.coeff(4,5)*Vx;
+    dis.E.coeffRef(5,0) = cont.E.coeff(5,0)*Vx;
 
-    // MatrixXd As = MatrixXd::Zero(data.nx + data.nu, data.nx + data.nu); // super A
-    // As.block(0,0,data.nx,data.nx) = dis.A;
-    // As.block(0,data.nx,data.nx,data.nu) = dis.B;
-    // As.block(data.nx,data.nx,data.nu,data.nu) = MatrixXd::Identity(data.nu,data.nu);
-    // MatrixXd expmAsTs = (As*data.Ts).exp();
+    MatrixXd As = MatrixXd::Zero(data.nx + data.nu, data.nx + data.nu); // super A
 
-    // As = MatrixXd::Zero(data.nx + data.nz, data.nx + data.nz); // super A
-    // As.block(0,0,data.nx,data.nx) = dis.A;
-    // As.block(0,data.nx,data.nx,data.nz) = dis.E;
-    // As.block(data.nx,data.nx,data.nz,data.nz) = MatrixXd::Identity(data.nz,data.nz);
+    As.block(0,0,data.nx,data.nx) = MatrixXd(dis.A);
+    As.block(0,data.nx,data.nx,data.nu) = MatrixXd(dis.B);
+    As.block(data.nx,data.nx,data.nu,data.nu) = MatrixXd::Identity(data.nu,data.nu);
+    MatrixXd expmAsTs = (As*data.Ts).exp();
+    dis.A = expmAsTs.block(0,0,data.nx,data.nx).sparseView();
+    dis.B = expmAsTs.block(0,data.nx,data.nx,data.nu).sparseView();
 
-    // dis.A = expmAsTs.block(0,0,data.nx,data.nx);
-    // dis.B = expmAsTs.block(0,data.nx,data.nx,data.nu);
-
-    // expmAsTs = (As*data.Ts).exp();
-    // dis.E = expmAsTs.block(0,data.nx,data.nx,data.nz);
+    As = MatrixXd::Zero(data.nx + data.nz, data.nx + data.nz); // super A
+    As.block(0,0,data.nx,data.nx) = dis.A;
+    As.block(0,data.nx,data.nx,data.nz) = dis.E;
+    As.block(data.nx,data.nx,data.nz,data.nz) = MatrixXd::Identity(data.nz,data.nz);
+    expmAsTs = (As*data.Ts).exp();
+    dis.E = expmAsTs.block(0,data.nx,data.nx,data.nz).sparseView();
     
     return dis;
 }
 
-// QPmatrizen setHessianGradient(System &dis, const params &data, VectorXd &xk, VectorXd &curvature, VectorXd &v_ref) {
-//     QPmatrizen out;
+QPmatrizen setHessianGradient(System &dis, const params &data, VectorXd &xk, VectorXd &curvature, VectorXd &v_ref) {
+    QPmatrizen out;
 
-//     // start with creating F
-//     MatrixXd F = MatrixXd::Zero(data.Np*data.ny,data.nx);
-//     for (size_t i = 0; i < data.Np; i++)
-//     {
-//         F.block(data.ny*i,0,data.ny,data.nx) = dis.C*dis.A.pow(i + 1);
-//     }
+    // start with creating F
+    MatrixXd F = MatrixXd::Zero(data.Np*data.ny,data.nx);
+    for (size_t i = 0; i < data.Np; i++)
+    {
+        F.block(data.ny*i,0,data.ny,data.nx) = dis.C*dis.A.pow(i + 1);
+    }
 
-//     // Make Phi_u
-//     MatrixXd Phi_u = MatrixXd::Zero(data.Np*data.ny, data.Nc*data.nu);
-//     MatrixXd firstCol = MatrixXd::Zero(data.Np*data.ny, data.nu);
-//     firstCol.block(0,0,data.ny,data.nu) = dis.C*dis.A.pow(0)*dis.B;
-//     for (size_t i = 1; i < data.Np; i++)
-//     {
-//         firstCol.block(data.ny*i,0,data.ny,data.nu) = F.block(data.ny*(i - 1),0,data.ny,data.nx)*dis.B;
-//     }
-//     for (size_t i = 0; i < data.Nc; i++)
-//     {
-//         Phi_u.block(data.ny*i, data.nu*i, data.Np*data.ny - data.ny*i, data.nu) = firstCol.block(0, 0, data.Np*data.ny - data.ny*i, data.nu);
-//     }
+    // Make Phi_u
+    MatrixXd Phi_u = MatrixXd::Zero(data.Np*data.ny, data.Nc*data.nu);
+    MatrixXd firstCol = MatrixXd::Zero(data.Np*data.ny, data.nu);
+    firstCol.block(0,0,data.ny,data.nu) = dis.C*dis.A.pow(0)*dis.B;
+    for (size_t i = 1; i < data.Np; i++)
+    {
+        firstCol.block(data.ny*i,0,data.ny,data.nu) = F.block(data.ny*(i - 1),0,data.ny,data.nx)*dis.B;
+    }
+    for (size_t i = 0; i < data.Nc; i++)
+    {
+        Phi_u.block(data.ny*i, data.nu*i, data.Np*data.ny - data.ny*i, data.nu) = firstCol.block(0, 0, data.Np*data.ny - data.ny*i, data.nu);
+    }
 
-//     // // Phi_z
-//     MatrixXd Phi_z = MatrixXd::Zero(data.Np*data.ny, data.Np*data.nz);
-//     firstCol = MatrixXd::Zero(data.Np*data.ny, data.nz);
-//     firstCol.block(0,0,data.ny,data.nz) = dis.C*dis.A.pow(0)*dis.E;
-//     for (size_t i = 1; i < data.Np; i++)
-//     {
-//         firstCol.block(data.ny*i,0,data.ny,data.nz) = F.block(data.ny*(i - 1),0,data.ny,data.nx)*dis.E;
-//     }
-//     for (size_t i = 0; i < data.Np; i++)
-//     {
-//         Phi_z.block(data.ny*i, data.nz*i, data.Np*data.ny - data.ny*i, data.nz) = firstCol.block(0, 0, data.Np*data.ny - data.ny*i, data.nz);
-//     }
+    // // Phi_z
+    // MatrixXd Phi_z = MatrixXd::Zero(data.Np*data.ny, data.Np*data.nz);
+    // firstCol = MatrixXd::Zero(data.Np*data.ny, data.nz);
+    // firstCol.block(0,0,data.ny,data.nz) = dis.C*dis.A.pow(0)*dis.E;
+    // for (size_t i = 1; i < data.Np; i++)
+    // {
+    //     firstCol.block(data.ny*i,0,data.ny,data.nz) = F.block(data.ny*(i - 1),0,data.ny,data.nx)*dis.E;
+    // }
+    // for (size_t i = 0; i < data.Np; i++)
+    // {
+    //     Phi_z.block(data.ny*i, data.nz*i, data.Np*data.ny - data.ny*i, data.nz) = firstCol.block(0, 0, data.Np*data.ny - data.ny*i, data.nz);
+    // }
 
-//     // Make big weighting matrix
-//     Vector2d R(data.R1,data.R2);
-//     Vector3d Q(data.Q1,data.Q2,data.Q3);
-//     MatrixXd bigR = MatrixXd::Zero(data.nu*data.Nc, data.nu*data.Nc);
-//     MatrixXd bigQ = MatrixXd::Zero(data.ny*data.Np, data.ny*data.Np);
-//     bigR.diagonal() << R.replicate(data.Nc,1);
-//     bigQ.diagonal() << Q.replicate(data.Np,1);
+    // // Make big weighting matrix
+    // Vector2d R(data.R1,data.R2);
+    // Vector3d Q(data.Q1,data.Q2,data.Q3);
+    // MatrixXd bigR = MatrixXd::Zero(data.nu*data.Nc, data.nu*data.Nc);
+    // MatrixXd bigQ = MatrixXd::Zero(data.ny*data.Np, data.ny*data.Np);
+    // bigR.diagonal() << R.replicate(data.Nc,1);
+    // bigQ.diagonal() << Q.replicate(data.Np,1);
 
-//     MatrixXd reference = MatrixXd::Zero(data.ny*data.Np,1) ; // 1:3:60 --> v_ref / 2:3:60 --> lateral ref e1 / 3:3:60 --> yaw ref e2
-//     for (size_t i = 0; i < data.ny*data.Np; i = i + data.ny)
-//     {
-//         reference(i) = v_ref(i/data.ny);
-//     }
+    // MatrixXd reference = MatrixXd::Zero(data.ny*data.Np,1) ; // 1:3:60 --> v_ref / 2:3:60 --> lateral ref e1 / 3:3:60 --> yaw ref e2
+    // for (size_t i = 0; i < data.ny*data.Np; i = i + data.ny)
+    // {
+    //     reference(i) = v_ref(i/data.ny);
+    // }
 
-//     SparseMatrix<double> spH, spf, spPhi_u, spBigR, spBigQ; //without allocation
-//     spPhi_u = Phi_u.sparseView();
-//     spBigR = bigR.sparseView();
-//     spBigQ = bigQ.sparseView();
+    // SparseMatrix<double> spH, spf, spPhi_u, spBigR, spBigQ; //without allocation
+    // spPhi_u = Phi_u.sparseView();
+    // spBigR = bigR.sparseView();
+    // spBigQ = bigQ.sparseView();
 
-//     // Calculate hessian with sparse --> faster
-//     spH = 2.0*(spPhi_u.transpose()*spBigQ*spPhi_u + spBigR);
+    // // Calculate hessian with sparse --> faster
+    // spH = 2.0*(spPhi_u.transpose()*spBigQ*spPhi_u + spBigR);
 
-//     // Make vector f
-//     VectorXd f(data.Nc*data.nu,1);
-//     spf = 2.0*spPhi_u.transpose()*spBigQ*(F*xk + Phi_z*curvature - reference).sparseView();
-//     f = VectorXd(spf);
+    // // Make vector f
+    // VectorXd f(data.Nc*data.nu,1);
+    // spf = 2.0*spPhi_u.transpose()*spBigQ*(F*xk + Phi_z*curvature - reference).sparseView();
+    // f = VectorXd(spf);
 
-//     // assign output
-//     out.hessian = spH;
-//     out.gradient = f;
-//     return out;
-// }
+    // // assign output
+    // out.hessian = spH;
+    // out.gradient = f;
+    return out;
+}
 
-// constraints setLowerUpperBounds(params &data) {
-//     constraints out;
+constraints setLowerUpperBounds(params &data) {
+    constraints out;
 
-//     // evaluate the lower and the upper inequality vectors
-//     VectorXd lowerInequality = VectorXd::Zero(data.Np*data.nu);
-//     VectorXd upperInequality = VectorXd::Zero(data.Np*data.nu);
-//     for (size_t i = 0; i < data.Np*data.nu; i += data.nu)
-//     {
-//         // constraints for first input (a_x)
-//         lowerInequality(i) = data.axMin;
-//         upperInequality(i) = data.axMax;
+    // evaluate the lower and the upper inequality vectors
+    VectorXd lowerInequality = VectorXd::Zero(data.Np*data.nu);
+    VectorXd upperInequality = VectorXd::Zero(data.Np*data.nu);
+    for (size_t i = 0; i < data.Np*data.nu; i += data.nu)
+    {
+        // constraints for first input (a_x)
+        lowerInequality(i) = data.axMin;
+        upperInequality(i) = data.axMax;
 
-//         // constraints for second input (delta)
-//         lowerInequality(i+1) = data.deltaMin;
-//         upperInequality(i+1) = data.deltaMax;
-//     }
+        // constraints for second input (delta)
+        lowerInequality(i+1) = data.deltaMin;
+        upperInequality(i+1) = data.deltaMax;
+    }
     
-//     // populate linear constraint matrix
-//     SparseMatrix<double> A(data.Np*data.nu,data.Np*data.nu);
-//     for (size_t i = 0; i < data.Np*data.nu; i++)
-//     {
-//         A.insert(i,i) = -1;
-//     }
+    // populate linear constraint matrix
+    SparseMatrix<double> A(data.Np*data.nu,data.Np*data.nu);
+    for (size_t i = 0; i < data.Np*data.nu; i++)
+    {
+        A.insert(i,i) = -1;
+    }
     
-//     // asssert output
-//     out.linearMatrix = A;
-//     out.lowerBound = lowerInequality;
-//     out.upperBound = upperInequality;
-//     return out;
-// }
+    // asssert output
+    out.linearMatrix = A;
+    out.lowerBound = lowerInequality;
+    out.upperBound = upperInequality;
+    return out;
+}
 
 
 int main()
@@ -257,8 +256,8 @@ int main()
     // Discrtize system !!
     System dis = setDiscreteSystem(cont,data,0.1);
 
-    // // Build Hessian, f, constraint matrix etc.
-    // QPmatrizen qp_matrizen = setHessianGradient(dis,data,xk,curvature,v_ref);
+    // Build Hessian, f, constraint matrix etc.
+    QPmatrizen qp_matrizen = setHessianGradient(dis,data,xk,curvature,v_ref);
 
     // // Make constraints
     // constraints cons = setLowerUpperBounds(data);
