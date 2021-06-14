@@ -29,7 +29,7 @@ struct params
 
     // MPC STUFF
     double Ts = 0.1; //s - sampling Time
-    double Tl = 5; // s - look-ahead time
+    double Tl = 3; // s - look-ahead time
     const int Np = Tl/Ts;
     int Nc = Np;
     int variables = Nc*nu;
@@ -168,7 +168,7 @@ QPmatrizen setHessianGradient(System &dis, const params &data, VectorXd &xk, Vec
         Phi_z.block(data.ny*i, data.nz*i, data.Np*data.ny - data.ny*i, data.nz) = firstCol.block(0, 0, data.Np*data.ny - data.ny*i, data.nz);
     }
 
-    // // Make big weighting matrix
+    // Make big weighting matrix
     Vector2d R(data.R1,data.R2);
     Vector3d Q(data.Q1,data.Q2,data.Q3);
     MatrixXd bigR = MatrixXd::Zero(data.nu*data.Nc, data.nu*data.Nc);
@@ -182,18 +182,18 @@ QPmatrizen setHessianGradient(System &dis, const params &data, VectorXd &xk, Vec
         reference(i) = v_ref(i/data.ny);
     }
 
-    SparseMatrix<double> spH, spF, spPhi_u, spBigR, spBigQ; //without allocation
-    spF = F.sparseView();
+    SparseMatrix<double> spH, spf, spPhi_u, spBigR, spBigQ; //without allocation
     spPhi_u = Phi_u.sparseView();
     spBigR = bigR.sparseView();
     spBigQ = bigQ.sparseView();
 
     // Calculate hessian with sparse --> faster
-    spH = 2.0*(2.0*spPhi_u.adjoint()*spBigQ*spPhi_u + spBigR);
+    spH = 2.0*(spPhi_u.transpose()*spBigQ*spPhi_u + spBigR);
 
     // Make vector f
     VectorXd f(data.Nc*data.nu,1);
-    f = (-1*0.5*(reference - F*xk - Phi_z*curvature).adjoint()*bigQ*Phi_u).transpose();
+    spf = 2.0*spPhi_u.transpose()*spBigQ*(F*xk + Phi_z*curvature - reference).sparseView();
+    f = VectorXd(spf);
 
     // assign output
     out.hessian = spH;
@@ -288,7 +288,7 @@ int main()
     // get the controller input
     QPSolution = solver.getSolution();
 
-    std::cout << QPSolution << std::endl;
+    // std::cout << QPSolution << std::endl;
     
     auto t1 = high_resolution_clock::now();
     // Loop ten times and calcute average time
