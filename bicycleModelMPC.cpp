@@ -113,19 +113,18 @@ System setDiscreteSystem(System &cont, struct params &data, double Vx) {
     dis.E(5) = cont.E(5)*Vx;
 
     MatrixXd As = MatrixXd::Zero(data.nx + data.nu, data.nx + data.nu); // super A
+    
     As.block(0,0,data.nx,data.nx) = dis.A;
     As.block(0,data.nx,data.nx,data.nu) = dis.B;
     As.block(data.nx,data.nx,data.nu,data.nu) = MatrixXd::Identity(data.nu,data.nu);
     MatrixXd expmAsTs = (As*data.Ts).exp();
+    dis.A = expmAsTs.block(0,0,data.nx,data.nx);
+    dis.B = expmAsTs.block(0,data.nx,data.nx,data.nu);
 
     As = MatrixXd::Zero(data.nx + data.nz, data.nx + data.nz); // super A
     As.block(0,0,data.nx,data.nx) = dis.A;
     As.block(0,data.nx,data.nx,data.nz) = dis.E;
     As.block(data.nx,data.nx,data.nz,data.nz) = MatrixXd::Identity(data.nz,data.nz);
-
-    dis.A = expmAsTs.block(0,0,data.nx,data.nx);
-    dis.B = expmAsTs.block(0,data.nx,data.nx,data.nu);
-
     expmAsTs = (As*data.Ts).exp();
     dis.E = expmAsTs.block(0,data.nx,data.nx,data.nz);
     
@@ -137,15 +136,18 @@ QPmatrizen setHessianGradient(System &dis, const params &data, VectorXd &xk, Vec
 
     // start with creating F
     MatrixXd F = MatrixXd::Zero(data.Np*data.ny,data.nx);
+    MatrixXd Apow = MatrixXd::Identity(data.nx,data.nx);
     for (size_t i = 0; i < data.Np; i++)
     {
-        F.block(data.ny*i,0,data.ny,data.nx) = dis.C*dis.A.pow(i + 1);
+        Apow = Apow*dis.A;
+        // F.block(data.ny*i,0,data.ny,data.nx) = dis.C*dis.A.pow(i + 1);
+        F.block(data.ny*i,0,data.ny,data.nx) = dis.C*Apow;
     }
 
     // Make Phi_u
     MatrixXd Phi_u = MatrixXd::Zero(data.Np*data.ny, data.Nc*data.nu);
     MatrixXd firstCol = MatrixXd::Zero(data.Np*data.ny, data.nu);
-    firstCol.block(0,0,data.ny,data.nu) = dis.C*dis.A.pow(0)*dis.B;
+    firstCol.block(0,0,data.ny,data.nu) = dis.C*dis.B;
     for (size_t i = 1; i < data.Np; i++)
     {
         firstCol.block(data.ny*i,0,data.ny,data.nu) = F.block(data.ny*(i - 1),0,data.ny,data.nx)*dis.B;
@@ -158,7 +160,7 @@ QPmatrizen setHessianGradient(System &dis, const params &data, VectorXd &xk, Vec
     // // Phi_z
     MatrixXd Phi_z = MatrixXd::Zero(data.Np*data.ny, data.Np*data.nz);
     firstCol = MatrixXd::Zero(data.Np*data.ny, data.nz);
-    firstCol.block(0,0,data.ny,data.nz) = dis.C*dis.A.pow(0)*dis.E;
+    firstCol.block(0,0,data.ny,data.nz) = dis.C*dis.E;
     for (size_t i = 1; i < data.Np; i++)
     {
         firstCol.block(data.ny*i,0,data.ny,data.nz) = F.block(data.ny*(i - 1),0,data.ny,data.nx)*dis.E;
